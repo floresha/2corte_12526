@@ -1,7 +1,7 @@
 import pandas as pd
 import glob
 import os
-import streamlit as st  # Importamos streamlit
+import streamlit as st
 
 # --- 1. Constantes Globales del Proyecto ---
 RUTA_DATOS = "datos_excel/"
@@ -11,7 +11,7 @@ NOMBRE_HOJA = "Hoja1"
 
 # --- 2. Funciones de Procesamiento de Datos ---
 
-@st.cache_data  # ¡Mantenemos la caché de Streamlit!
+@st.cache_data
 def cargar_y_procesar_todo():
     """
     Función única que carga, transforma, limpia y analiza todos los datos.
@@ -95,40 +95,35 @@ def cargar_y_procesar_todo():
     df_desglose_grupo_modulo = df_analisis.groupby(['grupo', 'Modulo'])['es_reprobado'].sum().reset_index()
     df_desglose_grupo_modulo = df_desglose_grupo_modulo.rename(columns={'es_reprobado': 'Total_Reprobadas'})
     df_desglose_grupo_modulo = df_desglose_grupo_modulo.sort_values(by=['grupo', 'Total_Reprobadas'], ascending=[True, False])
-    df_desglose_grupo_modulo = df_desglose_grupo_modulo[df_desglose_grupo_modulo['Total_Reprobadas'] > 0]
+    
+    # <-- MODIFICACIÓN 1: Hemos eliminado la línea que filtraba por > 0 aquí.
+    # df_desglose_grupo_modulo = df_desglose_grupo_modulo[df_desglose_grupo_modulo['Total_Reprobadas'] > 0] # <-- LÍNEA ELIMINADA
     
     return df_reprobados_alumno, df_reprobados_grupo, df_reprobados_modulo, df_desglose_grupo_modulo
 
 # --- 3. Construcción de la Interfaz de Usuario (UI) ---
 
-# Configuración de la página (para que use todo el ancho)
 st.set_page_config(layout="wide")
 
-# Título principal del Dashboard
 st.title("📊 Dashboard de Análisis de Reprobación")
 st.write("Este dashboard analiza los archivos de Excel en la carpeta `datos_excel/` para identificar grupos y módulos con problemas.")
 
-# Cargar los datos (usará la caché si es posible)
 df_al, df_gr, df_mod, df_gr_mod = cargar_y_procesar_todo()
 
-# Si los datos no se cargaron, detener la ejecución de la UI
 if df_al is None:
     st.stop()
 
 # --- 3.1. Resumen General ---
 st.header("Resumen General")
 
-# Organizar en columnas
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total de Reprobaciones", f"{df_gr['Total_Reprobadas'].sum():,}")
 col2.metric("Grupos Analizados", f"{len(df_gr)}")
 col3.metric("Alumnos Analizados", f"{len(df_al)}")
 col4.metric("Módulo con Más Reprobados", f"{df_mod.iloc[0]['Modulo']}")
 
-# --- MODIFICADO: Gráfico de Módulos (Top 10) movido aquí ---
 st.subheader("Top 10 Módulos con Más Reprobados (Global)")
 df_mod_chart = df_mod.head(10).set_index('Modulo')
-# Usar el gráfico de barras nativo de Streamlit
 st.bar_chart(df_mod_chart['Total_Reprobadas'], use_container_width=True)
 
 st.divider()
@@ -136,15 +131,11 @@ st.divider()
 # --- 3.2. Análisis Interactivo (Filtro y Desglose) ---
 st.header("Análisis Interactivo por Grupo")
 
-# Crear 2 columnas: una para filtros y otra para el desglose
 col_filtro, col_tabla_desglose = st.columns([1, 2])
 
 with col_filtro:
-    # --- MODIFICADO: Filtro Interactivo con grupos ordenados ---
-    
-    # Obtener lista de grupos únicos y ordenarla
     grupos_sorted = sorted(df_gr['grupo'].unique().tolist())
-    lista_grupos = ["Todos"] + grupos_sorted # Añadir "Todos" al inicio
+    lista_grupos = ["Todos"] + grupos_sorted
     
     grupo_seleccionado = st.selectbox(
         "Selecciona un grupo para filtrar:",
@@ -152,37 +143,37 @@ with col_filtro:
     )
     
     st.info("""
-    - Selecciona un grupo para ver el detalle.
-    - Selecciona 'Todos' para ver el ranking global.
+    - Selecciona un grupo para ver el detalle de todos sus módulos (incluidos los que tienen 0 reprobados).
+    - Selecciona 'Todos' para ver el ranking global (solo módulos con > 0 reprobados).
     """)
 
 with col_tabla_desglose:
-    # --- MODIFICADO: Tabla de Desglose movida aquí ---
     st.subheader(f"Desglose de Módulos Reprobados para: {grupo_seleccionado}")
     
+    # <-- MODIFICACIÓN 2: Lógica de filtrado movida aquí.
     if grupo_seleccionado == "Todos":
-        # Mostrar el ranking global si 'Todos' está seleccionado
-        st.dataframe(df_gr_mod, use_container_width=True, height=400)
+        # Si vemos "Todos", aplicamos el filtro > 0 para no ver miles de ceros.
+        df_filtrado_desglose = df_gr_mod[df_gr_mod['Total_Reprobadas'] > 0]
+        st.dataframe(df_filtrado_desglose, use_container_width=True, height=400)
     else:
-        # Filtrar el DataFrame por el grupo seleccionado
+        # Si vemos un GRUPO ESPECÍFICO, filtramos por ese grupo
+        # y mostramos TODO (incluyendo los ceros).
         df_filtrado_desglose = df_gr_mod[df_gr_mod['grupo'] == grupo_seleccionado]
         st.dataframe(df_filtrado_desglose, use_container_width=True, height=400)
 
 st.divider()
 
-# --- 3.3. NUEVO: Top 10 Alumnos del Grupo Seleccionado ---
+# --- 3.3. Top 10 Alumnos del Grupo Seleccionado ---
 st.header(f"Top 10 Alumnos con más Reprobadas (Grupo: {grupo_seleccionado})")
 
 if grupo_seleccionado == "Todos":
-    # Mostrar Top 10 Global
     st.dataframe(df_al.head(10), use_container_width=True)
 else:
-    # Filtrar por grupo y luego tomar el Top 10 de ese grupo
     df_filtrado_alumnos = df_al[df_al['grupo'] == grupo_seleccionado]
     st.dataframe(df_filtrado_alumnos.head(10), use_container_width=True)
 
 
-# --- 4. Expanders para ver datos completos (Sin cambios) ---
+# --- 4. Expanders para ver datos completos ---
 st.divider()
 st.header("Datos Maestros (Completos)")
 
