@@ -4,22 +4,17 @@ import os
 import streamlit as st  # Importamos streamlit
 
 # --- 1. Constantes Globales del Proyecto ---
-# (Se mantienen igual que en el script anterior)
 RUTA_DATOS = "datos_excel/"
 CALIF_MINIMA = 60
 COLUMNAS_FIJAS = ['grupo', 'matricula', 'nombre']
 NOMBRE_HOJA = "Hoja1"
 
 # --- 2. Funciones de Procesamiento de Datos ---
-# (Son las mismas funciones de tu script anterior, pero ahora
-# las "envolvemos" en un decorador de caché de Streamlit)
 
-@st.cache_data  # <-- ¡Magia de Streamlit!
+@st.cache_data  # ¡Mantenemos la caché de Streamlit!
 def cargar_y_procesar_todo():
     """
     Función única que carga, transforma, limpia y analiza todos los datos.
-    Streamlit la 'cacheará', por lo que solo se ejecutará una vez
-    a menos que los archivos de Excel cambien.
     """
     
     # --- 2.1. Cargar Datos ---
@@ -120,9 +115,7 @@ df_al, df_gr, df_mod, df_gr_mod = cargar_y_procesar_todo()
 if df_al is None:
     st.stop()
 
-st.divider()
-
-# --- 3.1. Métricas Globales ---
+# --- 3.1. Resumen General ---
 st.header("Resumen General")
 
 # Organizar en columnas
@@ -132,19 +125,26 @@ col2.metric("Grupos Analizados", f"{len(df_gr)}")
 col3.metric("Alumnos Analizados", f"{len(df_al)}")
 col4.metric("Módulo con Más Reprobados", f"{df_mod.iloc[0]['Modulo']}")
 
+# --- MODIFICADO: Gráfico de Módulos (Top 10) movido aquí ---
+st.subheader("Top 10 Módulos con Más Reprobados (Global)")
+df_mod_chart = df_mod.head(10).set_index('Modulo')
+# Usar el gráfico de barras nativo de Streamlit
+st.bar_chart(df_mod_chart['Total_Reprobadas'], use_container_width=True)
 
 st.divider()
 
-# --- 3.2. Gráficos y Filtros ---
+# --- 3.2. Análisis Interactivo (Filtro y Desglose) ---
 st.header("Análisis Interactivo por Grupo")
 
-# Crear 2 columnas: una para filtros y otra para el gráfico
-col_filtro, col_grafico = st.columns([1, 2])
+# Crear 2 columnas: una para filtros y otra para el desglose
+col_filtro, col_tabla_desglose = st.columns([1, 2])
 
 with col_filtro:
-    # --- Filtro Interactivo ---
-    # Obtener lista de grupos únicos
-    lista_grupos = ["Todos"] + df_gr['grupo'].unique().tolist()
+    # --- MODIFICADO: Filtro Interactivo con grupos ordenados ---
+    
+    # Obtener lista de grupos únicos y ordenarla
+    grupos_sorted = sorted(df_gr['grupo'].unique().tolist())
+    lista_grupos = ["Todos"] + grupos_sorted # Añadir "Todos" al inicio
     
     grupo_seleccionado = st.selectbox(
         "Selecciona un grupo para filtrar:",
@@ -156,51 +156,33 @@ with col_filtro:
     - Selecciona 'Todos' para ver el ranking global.
     """)
 
-with col_grafico:
-    # --- Gráfico de Módulos (Top 10) ---
-    st.subheader("Top 10 Módulos con Más Reprobados (Global)")
-    
-    # Preparar datos para el gráfico de Streamlit
-    df_mod_chart = df_mod.head(10).set_index('Modulo')
-    
-    # Usar el gráfico de barras nativo de Streamlit
-    st.bar_chart(df_mod_chart['Total_Reprobadas'])
-
-
-st.divider()
-
-# --- 3.3. Tablas de Datos (filtradas) ---
-st.header(f"Detalle para: {grupo_seleccionado}")
-
-# Crear dos columnas para las tablas
-col_tabla_1, col_tabla_2 = st.columns(2)
-
-with col_tabla_1:
-    # --- Tabla 1: Desglose de Módulos por Grupo ---
-    st.subheader("Desglose de Módulos Reprobados")
+with col_tabla_desglose:
+    # --- MODIFICADO: Tabla de Desglose movida aquí ---
+    st.subheader(f"Desglose de Módulos Reprobados para: {grupo_seleccionado}")
     
     if grupo_seleccionado == "Todos":
         # Mostrar el ranking global si 'Todos' está seleccionado
-        st.dataframe(df_gr_mod, use_container_width=True)
+        st.dataframe(df_gr_mod, use_container_width=True, height=400)
     else:
         # Filtrar el DataFrame por el grupo seleccionado
         df_filtrado_desglose = df_gr_mod[df_gr_mod['grupo'] == grupo_seleccionado]
-        st.dataframe(df_filtrado_desglose, use_container_width=True)
+        st.dataframe(df_filtrado_desglose, use_container_width=True, height=400)
 
-with col_tabla_2:
-    # --- Tabla 2: Alumnos Reprobados ---
-    st.subheader("Alumnos con Materias Reprobadas")
-    
-    if grupo_seleccionado == "Todos":
-        # Mostrar todos los alumnos
-        st.dataframe(df_al, use_container_width=True)
-    else:
-        # Filtrar por grupo
-        df_filtrado_alumnos = df_al[df_al['grupo'] == grupo_seleccionado]
-        st.dataframe(df_filtrado_alumnos, use_container_width=True)
+st.divider()
+
+# --- 3.3. NUEVO: Top 10 Alumnos del Grupo Seleccionado ---
+st.header(f"Top 10 Alumnos con más Reprobadas (Grupo: {grupo_seleccionado})")
+
+if grupo_seleccionado == "Todos":
+    # Mostrar Top 10 Global
+    st.dataframe(df_al.head(10), use_container_width=True)
+else:
+    # Filtrar por grupo y luego tomar el Top 10 de ese grupo
+    df_filtrado_alumnos = df_al[df_al['grupo'] == grupo_seleccionado]
+    st.dataframe(df_filtrado_alumnos.head(10), use_container_width=True)
 
 
-# --- 4. Expanders para ver datos completos ---
+# --- 4. Expanders para ver datos completos (Sin cambios) ---
 st.divider()
 st.header("Datos Maestros (Completos)")
 
